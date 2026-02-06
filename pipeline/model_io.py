@@ -58,7 +58,7 @@ def load_encoder(
         missing = model_keys - ckpt_keys
         unexpected = ckpt_keys - model_keys
         logger.warning(
-            "Checkpoint key mismatch – missing: %s, unexpected: %s",
+            "Checkpoint key mismatch - missing: %s, unexpected: %s",
             missing, unexpected,
         )
     model.load_state_dict(state_dict)
@@ -94,7 +94,7 @@ def load_gnn(
         missing = model_keys - ckpt_keys
         unexpected = ckpt_keys - model_keys
         logger.warning(
-            "Checkpoint key mismatch – missing: %s, unexpected: %s",
+            "Checkpoint key mismatch - missing: %s, unexpected: %s",
             missing, unexpected,
         )
     model.load_state_dict(state_dict)

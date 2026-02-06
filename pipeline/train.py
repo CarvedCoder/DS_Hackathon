@@ -523,9 +523,10 @@ def train_all(
         )
     device = torch.device(config.device)
 
-    if not skip_tests and verbose:
-        print("\n[4/4] Running Final test Evaluation ...")
-        print("-" * 40)
+    if not skip_tests:
+        if verbose:
+            print("\n[4/4] Running Final test Evaluation ...")
+            print("-" * 40)
 
         enc_test_state = enc_hist.pop("_test_state", None)
         if enc_test_state is not None:
