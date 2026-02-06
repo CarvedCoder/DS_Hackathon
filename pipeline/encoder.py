@@ -11,13 +11,11 @@ class TurnEncoder(nn.Module):
         super().__init__()
         self.config = config
 
-        # Lazy import so the module can be loaded even without transformers
         from transformers import AutoModel
 
         self.transformer = AutoModel.from_pretrained(config.model_name)
         hidden = config.hidden_dim
 
-        # ── Classification heads ──────────────────────────────────────
         self.emotion_head = nn.Sequential(
             nn.Linear(hidden, hidden // 2),
             nn.ReLU(),
@@ -35,7 +33,6 @@ class TurnEncoder(nn.Module):
         # Evidence span detection: binary per-token tag
         self.evidence_head = nn.Linear(hidden, 2)
 
-    # ─── forward ──────────────────────────────────────────────────────
 
     def forward(
         self,
