@@ -55,8 +55,8 @@ class TestBuildQueries:
 
     def test_diverse_query_categories(self):
         categories = {q["Query Category"] for q in _build_queries()}
-        assert len(categories) >= 4, (
-            f"Expected at least 4 distinct query categories, got {len(categories)}: {categories}"
+        assert len(categories) >= 5, (
+            f"Expected at least 5 distinct query categories, got {len(categories)}: {categories}"
         )
 
     def test_has_follow_up_queries(self):
@@ -84,12 +84,12 @@ class TestBuildQueries:
         )
 
     def test_remarks_reference_task_type(self):
-        """Remarks should indicate whether each query tests Task 1 or Task 2."""
+        """Every query's Remarks should indicate whether it tests Task 1 or Task 2."""
         queries = _build_queries()
-        task_refs = [q for q in queries if "Task 1" in q["Remarks"] or "Task 2" in q["Remarks"]]
-        assert len(task_refs) >= 20, (
-            f"Expected at least 20 queries with Task 1/2 references in Remarks, got {len(task_refs)}"
-        )
+        for q in queries:
+            assert "Task 1" in q["Remarks"] or "Task 2" in q["Remarks"], (
+                f"Query {q['Query Id']} Remarks must reference Task 1 or Task 2"
+            )
 
 
 class TestGenerateQueriesCsv:
