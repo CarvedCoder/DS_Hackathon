@@ -4,8 +4,9 @@ Verifies that:
 - The generated CSV has the correct header columns
 - The number of query rows is between 25 and 40
 - Query IDs are unique and sequential starting at 1
-- Diverse domains are represented
+- Queries cover multiple query categories (causal, follow-up, counterfactual, evidence)
 - Every field in every row is non-empty
+- Multi-turn follow-up chains are present (Task 2 requirement)
 """
 
 import csv
@@ -52,10 +53,42 @@ class TestBuildQueries:
             for key, value in q.items():
                 assert value.strip(), f"Empty field '{key}' in row {q['Query Id']}"
 
-    def test_diverse_categories(self):
+    def test_diverse_query_categories(self):
         categories = {q["Query Category"] for q in _build_queries()}
-        assert len(categories) >= 8, (
-            f"Expected at least 8 distinct categories, got {len(categories)}: {categories}"
+        assert len(categories) >= 4, (
+            f"Expected at least 4 distinct query categories, got {len(categories)}: {categories}"
+        )
+
+    def test_has_follow_up_queries(self):
+        """Task 2 requires multi-turn follow-up reasoning queries."""
+        queries = _build_queries()
+        follow_up = [q for q in queries if "Follow-up" in q["Query Category"]]
+        assert len(follow_up) >= 5, (
+            f"Expected at least 5 follow-up queries for Task 2, got {len(follow_up)}"
+        )
+
+    def test_has_causal_explanation_queries(self):
+        """Task 1 requires causal explanation queries."""
+        queries = _build_queries()
+        causal = [q for q in queries if "Causal" in q["Query Category"]]
+        assert len(causal) >= 5, (
+            f"Expected at least 5 causal-explanation queries for Task 1, got {len(causal)}"
+        )
+
+    def test_has_counterfactual_queries(self):
+        """Counterfactual reasoning tests causal analysis depth."""
+        queries = _build_queries()
+        cf = [q for q in queries if "Counterfactual" in q["Query Category"]]
+        assert len(cf) >= 2, (
+            f"Expected at least 2 counterfactual queries, got {len(cf)}"
+        )
+
+    def test_remarks_reference_task_type(self):
+        """Remarks should indicate whether each query tests Task 1 or Task 2."""
+        queries = _build_queries()
+        task_refs = [q for q in queries if "Task 1" in q["Remarks"] or "Task 2" in q["Remarks"]]
+        assert len(task_refs) >= 20, (
+            f"Expected at least 20 queries with Task 1/2 references in Remarks, got {len(task_refs)}"
         )
 
 
