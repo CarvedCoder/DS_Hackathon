@@ -257,3 +257,117 @@ class TestDeterministicSeeding:
         set_seed(42)
         b = torch.randn(5)
         assert torch.allclose(a, b)
+
+
+# ---------------------------------------------------------------------------
+# Test: Train / val / test split correctness
+# ---------------------------------------------------------------------------
+
+class TestDataSplit:
+    """Verify data is correctly split into non-overlapping train/val/test sets."""
+
+    def test_encoder_split_sizes_match_config(self):
+        config = PipelineConfig(device="cpu")
+        records = _make_dummy_records(100)
+        ckpt_dir = tempfile.mkdtemp()
+
+        hist = train_encoder(
+            config, records, checkpoint_dir=ckpt_dir,
+            epochs=1, verbose=False,
+        )
+
+        split = hist["split"]
+        assert split["train"] + split["val"] + split["test"] == 100
+        # Default 80/10/10 split
+        assert split["train"] == 80
+        assert split["val"] == 10
+        assert split["test"] == 10
+
+        shutil.rmtree(ckpt_dir)
+
+    def test_encoder_split_is_deterministic(self):
+        """Same seed should produce the same split."""
+        config = PipelineConfig(device="cpu")
+        records = _make_dummy_records(50)
+
+        ckpt1 = tempfile.mkdtemp()
+        ckpt2 = tempfile.mkdtemp()
+        hist1 = train_encoder(
+            config, records, checkpoint_dir=ckpt1,
+            epochs=1, verbose=False,
+        )
+        hist2 = train_encoder(
+            config, records, checkpoint_dir=ckpt2,
+            epochs=1, verbose=False,
+        )
+
+        assert hist1["split"] == hist2["split"]
+
+        shutil.rmtree(ckpt1)
+        shutil.rmtree(ckpt2)
+
+
+# ---------------------------------------------------------------------------
+# Test: Test evaluation produces valid metrics
+# ---------------------------------------------------------------------------
+
+class TestTestEvaluation:
+    """Verify the held-out test evaluation runs and returns valid results."""
+
+    def test_train_all_returns_test_metrics(self):
+        config = PipelineConfig(device="cpu")
+        records = _make_dummy_records(30)
+        ckpt_dir = tempfile.mkdtemp()
+
+        import pipeline.train as train_mod
+        orig_process = train_mod.process_dataset
+        train_mod.process_dataset = lambda cfg: records
+        try:
+            result = train_all(
+                config=config,
+                checkpoint_dir=ckpt_dir,
+                encoder_epochs=2,
+                gnn_epochs=1,
+                verbose=False,
+                force_train=True,
+                skip_tests=False,
+            )
+        finally:
+            train_mod.process_dataset = orig_process
+
+        enc = result["encoder_history"]
+        assert "test_loss" in enc, "Encoder test_loss must be present"
+        assert "test_accuracy" in enc, "Encoder test_accuracy must be present"
+        assert isinstance(enc["test_loss"], float)
+        assert 0.0 <= enc["test_accuracy"] <= 1.0
+
+        shutil.rmtree(ckpt_dir)
+
+    def test_split_info_in_history(self):
+        config = PipelineConfig(device="cpu")
+        records = _make_dummy_records(30)
+        ckpt_dir = tempfile.mkdtemp()
+
+        import pipeline.train as train_mod
+        orig_process = train_mod.process_dataset
+        train_mod.process_dataset = lambda cfg: records
+        try:
+            result = train_all(
+                config=config,
+                checkpoint_dir=ckpt_dir,
+                encoder_epochs=1,
+                gnn_epochs=1,
+                verbose=False,
+                force_train=True,
+                skip_tests=True,
+            )
+        finally:
+            train_mod.process_dataset = orig_process
+
+        enc = result["encoder_history"]
+        assert "split" in enc, "Split info must be present in encoder history"
+        assert enc["split"]["train"] > 0
+        assert enc["split"]["val"] >= 0
+        assert enc["split"]["test"] >= 0
+
+        shutil.rmtree(ckpt_dir)

@@ -144,7 +144,7 @@ def train_encoder(
     n_epochs = epochs or config.encoder.epochs
     lr = config.encoder.learning_rate
 
-    # Train / val split
+    # Train / val / test split
     np.random.seed(config.data.random_seed)
     n = len(records)
     indices = np.random.permutation(n)
@@ -153,6 +153,11 @@ def train_encoder(
     train_records = [records[i] for i in indices[:val_split]]
     val_records = [records[i] for i in indices[val_split:test_split]]
     test_records = [records[i] for i in indices[test_split:]]
+
+    if verbose:
+        print(f"  Data split: {len(train_records)} train / "
+              f"{len(val_records)} val / {len(test_records)} test "
+              f"(total {n})")
 
     train_ds = _ConversationDataset(train_records)
     val_ds = _ConversationDataset(val_records)
@@ -235,6 +240,11 @@ def train_encoder(
     })
     if verbose:
         print(f"  Encoder saved to {paths['encoder']}")
+    history["split"] = {
+        "train": len(train_records),
+        "val": len(val_records),
+        "test": len(test_records),
+    }
     history["_test_state"] = {
         "model": model_cpu,
         "test_records": test_records,
@@ -333,7 +343,7 @@ def train_gnn(
             print("  No graphs with edges found; skipping GNN training.")
         return {"train_loss": []}
 
-    # Train / val split
+    # Train / val / test split
     np.random.seed(config.data.random_seed)
     idx = np.random.permutation(len(graphs))
     val_split = int(len(graphs) * (1 - config.data.val_size - config.data.test_size))
@@ -341,6 +351,11 @@ def train_gnn(
     train_graphs = [graphs[i] for i in idx[:val_split]]
     val_graphs = [graphs[i] for i in idx[val_split:test_split]]
     test_graphs = [graphs[i] for i in idx[test_split:]]
+
+    if verbose:
+        print(f"  Data split: {len(train_graphs)} train / "
+              f"{len(val_graphs)} val / {len(test_graphs)} test "
+              f"(total {len(graphs)} graphs)")
 
     model = DiscourseGNN(config.discourse, input_dim=embed_dim).to(device)
     loss_fn = DiscourseGraphLoss()
@@ -413,6 +428,11 @@ def train_gnn(
     if verbose:
         print(f"  GNN saved to {paths['gnn']}")
 
+    history["split"] = {
+        "train": len(train_graphs),
+        "val": len(val_graphs),
+        "test": len(test_graphs),
+    }
     history["_test_state"] = {
         "model": model_cpu,
         "test_graphs": test_graphs,
@@ -525,7 +545,7 @@ def train_all(
 
     if not skip_tests:
         if verbose:
-            print("\n[4/4] Running Final test Evaluation ...")
+            print("\n[4/4] Running test-set evaluation ...")
             print("-" * 40)
 
         enc_test_state = enc_hist.pop("_test_state", None)
@@ -556,8 +576,23 @@ def train_all(
             if verbose:
                 print(f"  GNN      test_loss={gnn_test['test_loss']:.4f}"
                       f"  test_acc={gnn_test['test_accuracy']:.4f}")
+
+        # Print train-vs-test summary so users can verify generalisation
         if verbose:
             print("-" * 40)
+            print("\n  Train vs Test Summary:")
+            if enc_hist.get("train_loss") and "test_loss" in enc_hist:
+                enc_train_final = enc_hist["train_loss"][-1]
+                enc_test_final = enc_hist["test_loss"]
+                print(f"    Encoder  train_loss={enc_train_final:.4f}  "
+                      f"test_loss={enc_test_final:.4f}  "
+                      f"test_acc={enc_hist['test_accuracy']:.4f}")
+            if gnn_hist.get("train_loss") and "test_loss" in gnn_hist:
+                gnn_train_final = gnn_hist["train_loss"][-1]
+                gnn_test_final = gnn_hist["test_loss"]
+                print(f"    GNN      train_loss={gnn_train_final:.4f}  "
+                      f"test_loss={gnn_test_final:.4f}  "
+                      f"test_acc={gnn_hist['test_accuracy']:.4f}")
 
     # Save combined history
     combined = {
