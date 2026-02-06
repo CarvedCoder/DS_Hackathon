@@ -28,8 +28,8 @@ class TestBuildQueries:
 
     def test_row_count_in_range(self):
         queries = _build_queries()
-        assert 25 <= len(queries) <= 40, (
-            f"Expected 25-40 queries, got {len(queries)}"
+        assert 25 <= len(queries) <= 50, (
+            f"Expected 25-50 queries, got {len(queries)}"
         )
 
     def test_unique_ids(self):
@@ -39,9 +39,9 @@ class TestBuildQueries:
 
     def test_sequential_ids_starting_at_one(self):
         queries = _build_queries()
-        expected = [str(i) for i in range(1, len(queries) + 1)]
+        expected = [f"Q{i:03d}" for i in range(1, len(queries) + 1)]
         actual = [q["Query Id"] for q in queries]
-        assert actual == expected, "IDs must be sequential starting at 1"
+        assert actual == expected, "IDs must be sequential Q001, Q002, …"
 
     def test_required_keys_present(self):
         required = {"Query Id", "Query", "Query Category", "System Output", "Remarks"}
@@ -91,6 +91,34 @@ class TestBuildQueries:
                 f"Query {q['Query Id']} Remarks must reference Task 1 or Task 2"
             )
 
+    def test_covers_multiple_domains(self):
+        """Queries should reference at least 10 distinct domains."""
+        queries = _build_queries()
+        domain_keywords = {
+            "healthcare": "Healthcare",
+            "banking": "Banking",
+            "finance": "Finance",
+            "e-commerce": "E-commerce",
+            "telecom": "Telecom",
+            "insurance": "Insurance",
+            "technology": "Technology",
+            "travel": "Travel",
+            "legal": "Legal",
+            "education": "Education",
+            "science": "Science",
+            "hr": "HR",
+            "marketing": "Marketing",
+        }
+        found = set()
+        for q in queries:
+            text = q["Remarks"] + " " + q["Query"]
+            for key, label in domain_keywords.items():
+                if key.lower() in text.lower():
+                    found.add(label)
+        assert len(found) >= 10, (
+            f"Expected at least 10 domains, found {len(found)}: {found}"
+        )
+
 
 class TestGenerateQueriesCsv:
     """Integration tests for the CSV generation function."""
@@ -130,7 +158,7 @@ class TestGenerateQueriesCsv:
             reader = csv.reader(io.StringIO(content))
             rows = list(reader)
             data_rows = rows[1:]  # exclude header
-            assert 25 <= len(data_rows) <= 40
+            assert 25 <= len(data_rows) <= 50
         finally:
             os.unlink(path)
 
