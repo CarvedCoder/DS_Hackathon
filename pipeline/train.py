@@ -1,4 +1,7 @@
+import logging
 import os
+import random
+import tempfile
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -18,10 +21,23 @@ from .discourse_graph import (
 )
 from .model_io import (
     default_paths,
+    load_encoder as _load_encoder_ckpt,
+    load_gnn as _load_gnn_ckpt,
     save_encoder,
     save_gnn,
     save_training_history,
 )
+
+logger = logging.getLogger(__name__)
+
+
+def set_seed(seed: int = 42) -> None:
+    """Set random seeds for reproducibility in one place."""
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
 
 
 
@@ -121,6 +137,7 @@ def train_encoder(
     epochs: Optional[int] = None,
     verbose: bool = True,
 ) -> Dict[str, Any]:
+    set_seed(config.data.random_seed)
     device = torch.device(config.device)
     if records is None:
         records = process_dataset(config)
@@ -218,7 +235,6 @@ def train_encoder(
     })
     if verbose:
         print(f"  Encoder saved to {paths['encoder']}")
-    train_all()
     history["_test_state"] = {
         "model": model_cpu,
         "test_records": test_records,
@@ -397,7 +413,6 @@ def train_gnn(
     if verbose:
         print(f"  GNN saved to {paths['gnn']}")
 
-    train_all()
     history["_test_state"] = {
         "model": model_cpu,
         "test_graphs": test_graphs,
@@ -443,15 +458,24 @@ def train_all(
     encoder_epochs: Optional[int] = None,
     gnn_epochs: Optional[int] = None,
     verbose: bool = True,
+    force_train: bool = False,
+    skip_encoder: bool = False,
+    skip_gnn: bool = False,
+    resume: bool = False,
+    skip_tests: bool = False,
 ) -> Dict[str, Any]:
     if config is None:
         config = PipelineConfig()
+
+    set_seed(config.data.random_seed)
 
     if verbose:
         print("=" * 60)
         print("TRAINING PIPELINE")
         print(f"Device: {config.device}")
         print("=" * 60)
+
+    paths = default_paths(checkpoint_dir)
 
     # Load data once
     if verbose:
@@ -461,23 +485,45 @@ def train_all(
         print(f"  Loaded {len(records)} conversation records.")
 
     # Stage 1: Encoder
-    if verbose:
-        print("\n[2/4] Training feature encoder...")
-    enc_hist = train_encoder(
-        config, records, checkpoint_dir,
-        epochs=encoder_epochs, verbose=verbose,
-    )
+    enc_hist: Dict[str, Any] = {"train_loss": [], "val_loss": [], "val_accuracy": []}
+    if skip_encoder:
+        if verbose:
+            print("\n[2/4] Skipping encoder training (--skip-encoder).")
+        logger.info("Encoder training skipped via --skip-encoder flag.")
+    elif not force_train and os.path.exists(paths["encoder"]) and not resume:
+        if verbose:
+            print(f"\n[2/4] Encoder checkpoint found at {paths['encoder']}; skipping training.")
+            print("  Use --force-train to retrain from scratch.")
+        logger.info("Encoder checkpoint exists; skipping training.")
+    else:
+        if verbose:
+            print("\n[2/4] Training feature encoder...")
+        enc_hist = train_encoder(
+            config, records, checkpoint_dir,
+            epochs=encoder_epochs, verbose=verbose,
+        )
 
     # Stage 2: GNN
-    if verbose:
-        print("\n[3/4] Training discourse GNN...")
-    gnn_hist = train_gnn(
-        config, records, checkpoint_dir,
-        epochs=gnn_epochs, verbose=verbose,
-    )
+    gnn_hist: Dict[str, Any] = {"train_loss": [], "val_loss": [], "val_accuracy": []}
+    if skip_gnn:
+        if verbose:
+            print("\n[3/4] Skipping GNN training (--skip-gnn).")
+        logger.info("GNN training skipped via --skip-gnn flag.")
+    elif not force_train and os.path.exists(paths["gnn"]) and not resume:
+        if verbose:
+            print(f"\n[3/4] GNN checkpoint found at {paths['gnn']}; skipping training.")
+            print("  Use --force-train to retrain from scratch.")
+        logger.info("GNN checkpoint exists; skipping training.")
+    else:
+        if verbose:
+            print("\n[3/4] Training discourse GNN...")
+        gnn_hist = train_gnn(
+            config, records, checkpoint_dir,
+            epochs=gnn_epochs, verbose=verbose,
+        )
     device = torch.device(config.device)
 
-    if verbose:
+    if not skip_tests and verbose:
         print("\n[4/4] Running Final test Evaluation ...")
         print("-" * 40)
 
