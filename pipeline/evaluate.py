@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
 import numpy as np
 from .config import PipelineConfig
 from .causal_model import extract_causal_variables
@@ -12,6 +12,14 @@ from .evaluation import (
     relevancy_score,
 )
 from .explanation import retrieve_evidence_turns
+
+_STOPWORDS: Set[str] = {"i", "the", "a", "is", "to", "and", "my", "it", "of", "in"}
+
+_PENDING_INTENT_KEYWORDS = (
+    "schedul", "appointment", "service interruption",
+    "account access", "delivery", "reservation",
+    "order status",
+)
 
 
 def _derive_ground_truth_causes(record: dict) -> List[str]:
@@ -47,7 +55,7 @@ def _derive_ground_truth_causes(record: dict) -> List[str]:
             prev_words = set(customer_texts[i - 1].split())
             curr_words = set(customer_texts[i].split())
             # Exclude very common words
-            common = prev_words & curr_words - {"i", "the", "a", "is", "to", "and", "my", "it", "of", "in"}
+            common = prev_words & curr_words - _STOPWORDS
             if len(common) >= 2:
                 causes.append("repetition")
                 break
@@ -112,11 +120,7 @@ def _predict_outcome(
         return OUTCOME_MAP.get("refunded", 3)
 
     # Pending intents: scheduling, service interruptions, access issues, delivery
-    if any(kw in intent for kw in (
-        "schedul", "appointment", "service interruption",
-        "account access", "delivery", "reservation",
-        "order status",
-    )):
+    if any(kw in intent for kw in _PENDING_INTENT_KEYWORDS):
         return OUTCOME_MAP.get("pending", 2)
 
     # Multi-issue intents with specific patterns
