@@ -31,6 +31,8 @@ def build_discourse_graph(
     turns: List[dict],
     turn_embeddings: torch.Tensor,
     edge_types: List[str],
+    edge_dropout: float = 0.0,
+    node_shuffle: bool = False,
 ) -> dict:
     etype_to_idx = {et: i for i, et in enumerate(edge_types)}
     src_list, tgt_list, attr_list, label_list = [], [], [], []
@@ -51,7 +53,19 @@ def build_discourse_graph(
 
     edge_index = torch.tensor([src_list, tgt_list], dtype=torch.long)
     edge_attr = torch.tensor(attr_list, dtype=torch.long)
+    if edge_index.numel() > 0 and edge_dropout > 0:
+        keep_mask = torch.rand(edge_index.shape[1]) >= edge_dropout
+        edge_index = edge_index[:, keep_mask]
+        edge_attr = edge_attr[keep_mask]
+        label_list = [lbl for lbl, keep in zip(label_list, keep_mask.tolist()) if keep]
 
+    if node_shuffle and turn_embeddings.shape[0] > 1:
+        perm = torch.randperm(turn_embeddings.shape[0])
+        inv_perm = torch.empty_like(perm)
+        inv_perm[perm] = torch.arange(perm.shape[0])
+        turn_embeddings = turn_embeddings[perm]
+        if edge_index.numel() > 0:
+            edge_index = inv_perm[edge_index]
     return {
         "node_features": turn_embeddings,
         "edge_index": edge_index,

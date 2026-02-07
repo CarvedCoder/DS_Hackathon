@@ -48,6 +48,8 @@ class DiscourseConfig:
     gnn_num_layers: int = 3
     gnn_heads: int = 4
     dropout: float = 0.3
+    edge_dropout: float = 0.2
+    node_shuffle: bool = True
     learning_rate: float = 1e-3
     epochs: int = 30
     batch_size: int = 32

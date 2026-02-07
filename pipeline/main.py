@@ -12,6 +12,8 @@ from .causal_model import (
     estimate_causal_effect,
     counterfactual_query,
     identify_root_causes,
+    estimate_edge_weights,
+    dynamic_causal_chain,
 )
 from .explanation import (
     retrieve_evidence_turns,
@@ -77,6 +79,8 @@ class CausalAnalysisPipeline:
             turns=turn_features,
             turn_embeddings=turn_embeddings,
             edge_types=self.config.discourse.edge_types,
+            edge_dropout=self.config.discourse.edge_dropout,
+            node_shuffle=self.config.discourse.node_shuffle,
         )
 
         if self.discourse_gnn is None:
@@ -122,7 +126,15 @@ class CausalAnalysisPipeline:
         )
 
         # Determine most likely causal chain
-        chain = [rc["variable"] for rc in root_causes[:3]] + [self.config.causal.outcome]
+        edge_weights = estimate_edge_weights(all_causal_data, self.causal_dag)
+
+        # Determine most likely causal chain (data-dependent)
+        chain = dynamic_causal_chain(
+            observation=cv,
+            dag=self.causal_dag,
+            outcome=self.config.causal.outcome,
+            edge_weights=edge_weights,
+        )
 
         # Counterfactual: what if treatment had been zero?
         cf = counterfactual_query(

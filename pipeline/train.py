@@ -427,7 +427,13 @@ def train_gnn(
         if len(tf) < 2:
             continue
         turn_emb = _build_turn_embeddings(tf, embed_dim)
-        g = build_discourse_graph(tf, turn_emb, config.discourse.edge_types)
+        g = build_discourse_graph(
+            tf,
+            turn_emb,
+            config.discourse.edge_types,
+            edge_dropout=config.discourse.edge_dropout,
+            node_shuffle=config.discourse.node_shuffle,
+        )
         if g["edge_index"].shape[1] > 0:
             graphs.append(g)
 

@@ -226,3 +226,56 @@ def identify_root_causes(
         results.append({"variable": var, **effect})
     results.sort(key=lambda r: abs(r["ate"]), reverse=True)
     return results
+
+def estimate_edge_weights(
+    data: List[Dict[str, float]],
+    dag: CausalDAG,
+) -> Dict[Tuple[str, str], float]:
+    """Estimate edge weights from data using correlation as a proxy."""
+    weights: Dict[Tuple[str, str], float] = {}
+    if not data:
+        return {edge: 0.0 for edge in dag.edges}
+    for src, tgt in dag.edges:
+        src_vals = np.array([d.get(src, 0.0) for d in data])
+        tgt_vals = np.array([d.get(tgt, 0.0) for d in data])
+        if src_vals.std() == 0 or tgt_vals.std() == 0:
+            weights[(src, tgt)] = 0.0
+            continue
+        corr = float(np.corrcoef(src_vals, tgt_vals)[0, 1])
+        if np.isnan(corr):
+            corr = 0.0
+        weights[(src, tgt)] = corr
+    return weights
+
+
+def dynamic_causal_chain(
+    observation: Dict[str, float],
+    dag: CausalDAG,
+    outcome: str,
+    edge_weights: Dict[Tuple[str, str], float],
+) -> List[str]:
+    """Compute a dynamic causal chain based on observation and edge weights."""
+    if outcome not in dag.variables:
+        return []
+
+    node_scores = {v: max(0.0, float(observation.get(v, 0.0))) for v in dag.variables}
+    total = sum(node_scores.values())
+    if total > 0:
+        attention_scores = {v: node_scores[v] / total for v in dag.variables}
+    else:
+        attention_scores = {v: 0.0 for v in dag.variables}
+
+    best_score: Dict[str, float] = {v: attention_scores[v] for v in dag.variables}
+    best_path: Dict[str, List[str]] = {v: [v] for v in dag.variables}
+
+    for node in dag.topological_sort():
+        for child in dag.children(node):
+            coeff = abs(edge_weights.get((node, child), 0.0))
+            edge_score = coeff * attention_scores[node] * attention_scores[child]
+            candidate = best_score[node] + edge_score
+            if candidate > best_score[child]:
+                best_score[child] = candidate
+                best_path[child] = best_path[node] + [child]
+
+    chain = best_path.get(outcome, [outcome])
+    return chain if chain[-1] == outcome else chain + [outcome]
